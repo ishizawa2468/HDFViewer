@@ -28,7 +28,10 @@ def is_hdf5_file(file_path):
 
 def get_file_path():
     """ユーザーからのHDF5ファイルのパス入力を処理する"""
-    file_path = st.text_input(".hdf5ファイルのフルパスを貼り付け", "/Users/ishizawaosamu/work/MasterThesis/save/processed_hdf/OIbDia06_2nd_down_processed.hdf")
+    file_path = st.text_input(
+        label=".hdf5ファイルのフルパスを貼り付け",
+        value=""
+    )
 
     # validation
     if not is_hdf5_file(file_path):
