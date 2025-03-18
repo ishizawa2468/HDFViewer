@@ -3,158 +3,157 @@ from streamlit_antd_components import tree, TreeItem
 
 import numpy as np
 import matplotlib.pyplot as plt
-
+import io
 import os
 import h5py
 
 import util
 
-st.set_page_config(
-    page_title="HDF Viewer",
-    layout="wide",
-)
-
-st.title("HDF Viewer")
-
-up_col1, up_col2 = st.columns(2)
-with up_col1:
-    st.markdown(
-        """
-        ### 【概要】
-        - `.hdf5`などのHDFファイルの中身を表示します。`.nxs`もHDF5の一種なので見れます。
-        - ファイルパス(絶対パス)を貼り付けてください。
-            - Macでは `option` を押しながら`command + c` (コピー)
-            - Windowsでは...
-        """
+# ==============================
+# Streamlit 設定
+# ==============================
+def set_streamlit_config():
+    st.set_page_config(
+        page_title="HDF Viewer",
+        layout="wide",
     )
-with up_col2:
-    # セッション情報を表示
-    st.markdown("### 【セッション情報】")
-    st.write("ブラウザに一時的に記憶されている情報。表示がおかしいときに参照したりクリアしてください。")
-    st.write(st.session_state)
-    # クリアボタンの作成
-    if st.button("セッション情報をクリア"):
-        st.session_state.clear()
+    st.title("HDF Viewer")
 
-file_path = st.text_input(".hdf5ファイルのフルパスを貼り付け", "")
+def is_hdf5_file(file_path):
+    """ファイルがHDF5フォーマットかどうかをチェック"""
+    try:
+        return h5py.is_hdf5(file_path)
+    except Exception:
+        return False
 
-# ファイルパスが入力されたらsession_stateに保存
-if file_path and os.path.isfile(file_path):
-    st.session_state.file_path = file_path
-    filename = file_path.split("/")[-1]
-    location = file_path.replace(filename, "")
-    st.markdown(
-        f"##### File set : `{filename}`"
-    )
-else:
-    if file_path:
-        st.error("The file path is invalid or the file does not exist.")
+def get_file_path():
+    """ユーザーからのHDF5ファイルのパス入力を処理する"""
+    file_path = st.text_input(".hdf5ファイルのフルパスを貼り付け", "/Users/ishizawaosamu/work/MasterThesis/save/processed_hdf/OIbDia06_2nd_down_processed.hdf")
+
+    # validation
+    if not is_hdf5_file(file_path):
+        st.error("⚠️ 指定されたファイルはHDF5形式ではありません。対応しているファイルを選択してください。")
         st.stop()
+    st.session_state.file_path = file_path
+    filename = os.path.basename(file_path)
+    st.markdown(f"##### Selected file : `{filename}`")
+    return file_path
 
-st.divider()
+# ==============================
+# HDF5 関連の処理
+# ==============================
+def display_hdf5_tree(path_obj):
+    """HDF5ファイルのツリー構造を表示し、選択されたデータパスを返す"""
+    st.markdown("### 【HDF5ファイル構造】")
 
-# フルパスを取得・保持するためのオブジェクトを作成
-if 'file_path' in st.session_state:
-    path_obj = util.HDFPath(st.session_state.file_path)
-else:
-    st.stop()  # ファイルが指定されていない場合処理を中断
+    tree_items = path_obj.get_structure()
 
-# HDF5ファイルのツリー構造を表示
-if os.path.isfile(st.session_state.file_path):
-    with h5py.File(st.session_state.file_path, 'r') as f:
-        # 左右のカラムを作成
-        view_col1, view_col2 = st.columns(2)
+    selected_item = tree(
+        items=tree_items,
+        open_all=True,
+        checkbox=False,
+        show_line=True,
+        key="hdf5_tree"
+    )
 
-        with view_col1:
-            st.markdown("### 【HDF5ファイル構造】")
-            tree_items = [TreeItem(label="Root", children=path_obj.get_structure(), disabled=False)]
+    if selected_item and selected_item in path_obj.path_map:
+        st.session_state.selected_dataset = path_obj.path_map[selected_item]
+        return st.session_state.selected_dataset
+    else:
+        return None
 
-            selected_item = tree(
-                items=tree_items,
-                width=500,
-                height=500,
-                open_all=True,
-                checkbox=False,
-                show_line=True,
-                key="hdf5_tree"
-            )
 
-            # ユーザーが選択したアイテムを処理
-            if selected_item:
-                # `path_map` から対応するフルパスを取得
-                if selected_item in path_obj.path_map:
-                    selected_path = path_obj.path_map[selected_item]
-                    st.session_state.selected_dataset = selected_path
-                else:
-                    st.error(f"Path '{selected_item}' に対応するフルパスが見つかりません。")
+def display_dataset(file_path, dataset_path):
+    """選択されたHDF5データセットを表示"""
+    with h5py.File(file_path, "r") as f:
+        dataset = f[dataset_path]
+        st.markdown(f"**選択したデータパス:** `{dataset_path}`")
 
-                if False:  # デバッグにするときにTrue
-                    # デバッグ用にアプリ上に表示して確認
-                    st.divider()
-                    st.markdown("#### デバッグ用情報")
-                    st.markdown(f"**選択されたパス:** `{selected_item}`")
-                    # path_map の全てのキーを表示
-                    st.markdown("**path_map のキー一覧:**")
-                    st.write(list(path_obj.path_map.keys()))
+        # データのメタ情報を表示
+        st.write(f"データの形状 (shape): `{dataset.shape}`")
+        st.write(f"データ型 (dtype): `{dataset.dtype}`")
 
-        with view_col2:
-            st.markdown("### 【データ表示】")
-            if 'selected_dataset' in st.session_state:
-                dataset_path = st.session_state.selected_dataset
-                if dataset_path in f:
-                    st.markdown(f"**選択したデータパス:** `{dataset_path}`")
+        st.divider()
 
-                    # shape と type を表示
-                    dataset = f[dataset_path]
-                    st.write(f"**データの形状 (shape):** {dataset.shape}")
-                    st.write(f"**データ型 (dtype):** {dataset.dtype}")
-                    st.divider()
-                    # 2次元データ以下ならデータを読み込む。3次元では分岐先で1frame分のデータのみを読み込む
-                    if len(dataset.shape) < 3:
-                        data = dataset[...]
-                    else:
-                        data = np.array([[[1]]]) # HACK: 3次元のndarrayを仮に作って↓の分岐に正しく入るようにした
+        # CSVダウンロードボタンの追加 (1D, 2Dデータのみ対応)
+        if dataset.ndim <= 2:
+            display_csv_download_button(dataset)
 
-                    # データの型や次元に応じた可視化
-                    if isinstance(data, np.ndarray):
-                        if data.ndim == 0:  # スカラー値の場合
-                            st.write(f"### スカラー値: {data}")
-                        elif data.ndim == 1:  # 1次元配列の場合
-                            st.write("### 1次元データ")
-                            fig, ax = plt.subplots()
-                            ax.plot(data)
-                            ax.set_title(dataset_path)
-                            st.pyplot(fig)
-                            st.write(data)
-                        elif data.ndim == 2:  # 2次元配列の場合
-                            st.write("### 2次元データ")
-                            fig, ax = plt.subplots()
-                            im = ax.imshow(data, cmap="jet", aspect='auto') # aspectをautoにしている
-                            fig.colorbar(im, ax=ax)
-                            ax.set_title(dataset_path)
-                            st.pyplot(fig)
-                            st.write(data)
-                        elif data.ndim == 3:  # 3次元配列の場合
-                            st.write("### 3次元データのスライス")
-                            # 0次元方向のスライスを表示
-                            slice_index = st.slider("Frame数", min_value=1, max_value=dataset.shape[0], step=1) - 1 # 表示では1始まりにする
-                            fig, ax = plt.subplots()
-                            data = dataset[slice_index]
-                            im = ax.imshow(data, cmap="jet")
-                            fig.colorbar(im, ax=ax)
-                            ax.set_title(f"{slice_index+1} frame")
-                            st.pyplot(fig)
-                        else:  # 高次元データの場合
-                            st.warning(f"高次元データの視覚化は未対応です (shape: {data.shape})")
-                    elif isinstance(data, (str, bytes)):  # 文字列データの場合
-                        st.write("### 文字列データ")
-                        st.text(data.decode() if isinstance(data, bytes) else data)
-                    elif isinstance(data, (bool, np.bool_)):  # ブール型データの場合
-                        st.write(f"### ブール値: {data}")
-                    else:  # その他のデータ型
-                        st.write("### 未対応のデータ型")
-                        st.write(data)
-                else:
-                    st.error(f"The selected dataset '{dataset_path}' does not exist in the file.")
-            else:
-                st.markdown("### データセットが選択されていません。")
+        st.divider()
+
+        # データの可視化
+        visualize_data(dataset)
+
+
+
+def display_csv_download_button(dataset):
+    """CSVダウンロードボタンを表示 (1Dまたは2Dデータ)"""
+    data = dataset[()]  # データを取得
+
+    if data.ndim > 2:
+        st.warning("CSVダウンロードは1次元または2次元のデータにのみ対応しています。")
+        return
+
+    # CSVデータをメモリ上のバッファに保存
+    buffer = io.StringIO()
+    np.savetxt(buffer, data, delimiter=",")
+    buffer.seek(0)
+
+    # ダウンロードボタンを表示
+    st.download_button(
+        label="📁 Download CSV",
+        data=buffer.getvalue(),
+        type="primary",
+        file_name="dataset.csv",
+        mime="text/csv"
+    )
+
+
+def visualize_data(dataset):
+    """HDF5データを可視化"""
+    data = dataset[()] if dataset.ndim < 3 else np.array([[[1]]])  # 3次元以上の場合の仮データ
+
+    fig, ax = plt.subplots()
+
+    if dataset.ndim == 0:
+        st.write(f"### スカラー値: {data}")
+    elif dataset.ndim == 1:
+        st.write("### 1次元データ")
+        ax.plot(data)
+        ax.set_title(dataset.name)
+        st.pyplot(fig)
+        st.write(data)
+    elif dataset.ndim == 2:
+        st.write("### 2次元データ")
+        im = ax.imshow(data, cmap="jet", aspect='auto')
+        fig.colorbar(im, ax=ax)
+        ax.set_title(dataset.name)
+        st.pyplot(fig)
+        st.write(data)
+    elif dataset.ndim == 3:
+        st.write("### 3次元データのスライス")
+        slice_index = st.slider("Frame数", min_value=1, max_value=dataset.shape[0], step=1) - 1
+        data = dataset[slice_index]
+        im = ax.imshow(data, cmap="jet")
+        fig.colorbar(im, ax=ax)
+        ax.set_title(f"{slice_index + 1} frame")
+        st.pyplot(fig)
+    else:
+        st.warning(f"未対応データ形式です (shape: {dataset.shape})")
+
+
+# ==============================
+# メイン処理
+# ==============================
+set_streamlit_config()
+file_path = get_file_path()
+
+tree_col, display_col = st.columns(2)
+if file_path:
+    path_obj = util.HDFPath(file_path)
+    with tree_col:
+        selected_path = display_hdf5_tree(path_obj)
+
+    if selected_path:
+        with display_col:
+            display_dataset(file_path, selected_path)
