@@ -142,10 +142,9 @@ def display_dataset(file_path, dataset_path):
         st.divider()
 
         # CSVダウンロードボタンの追加 (1D, 2Dデータのみ対応)
-        if dataset.ndim <= 2:
+        if 1 <= dataset.ndim <= 2:
             display_csv_download_button(dataset)
-
-        st.divider()
+            st.divider()
 
         # データの可視化
         visualize_data(dataset)
@@ -179,11 +178,14 @@ def visualize_data(dataset):
     """HDF5データを可視化"""
     data = dataset[()] if dataset.ndim < 3 else np.array([[[1]]])  # 3次元以上の場合の仮データ
 
-    fig, ax = plt.subplots()
-
+    # スカラー値の場合は表示して終わり
     if dataset.ndim == 0:
         st.write(f"### スカラー値: {data}")
-    elif dataset.ndim == 1:
+        return
+
+    # 図示するもの
+    fig, ax = plt.subplots()
+    if dataset.ndim == 1:
         st.write("### 1次元データ")
         ax.plot(data)
         ax.set_title(dataset.name)
