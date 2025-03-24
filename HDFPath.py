@@ -1,15 +1,27 @@
+"""
+HDFPath クラスは、HDF5ファイルの階層構造（パス構造）を解析・管理し、
+Streamlitアプリケーションにおいて利用可能な**ツリー表示用データ構造（TreeItem）**に変換するためのユーティリティクラスです。
+
+主に次の機能を提供します：
+
+- HDF5ファイルから階層構造を抽出
+
+- データセットやグループのフルパスをマッピング
+
+- Streamlit向けの視覚表示用構造に変換
+"""
+
 import h5py
 from streamlit_antd_components import TreeItem
 
 class HDFPath:
-    """HDF5のパスと構造を管理するクラス"""
     def __init__(self, file_path: str):
         self.file_path = file_path
         self.structure = None  # HDF5ツリー構造を保存
         self.path_map = {}  # フルパスのマッピング
 
     def get_structure(self) -> list[TreeItem]:
-        """HDF5ファイルのツリー構造を取得"""
+        """HDF5ファイルの内容をStreamlitのUI用にTreeItemのリストとして提供"""
         if self.structure is not None:
             return self.structure
 
@@ -20,7 +32,7 @@ class HDFPath:
         return self.structure
 
     def _build_tree(self, h5obj) -> dict:
-        """HDF5のネストされた辞書構造を作成"""
+        """HDF5ファイルの内部構造を、ネストされた辞書構造としてオブジェクト化"""
         tree = {}
 
         def visitor_func(name, obj):
@@ -40,7 +52,7 @@ class HDFPath:
         return tree
 
     def _convert_to_treeitems(self, tree: dict) -> list[TreeItem]:
-        """辞書からTreeItemのリストに変換"""
+        """内部辞書構造をStreamlitのTreeItemリストに変換し、UI表示に適した形式を生成"""
         def build_treeitems(node_dict):
             items = []
             for key, val in node_dict.items():
