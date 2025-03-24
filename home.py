@@ -5,9 +5,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import io
 import os
+import json
 import h5py
 
-import HDFPath
+from HDFPath import HDFPath
+
+TEMPLATE_FILE = "template_paths.json"
 
 # ==============================
 # Streamlit 設定
@@ -19,28 +22,88 @@ def set_streamlit_config():
     )
     st.title("HDF Viewer")
 
+# ==============================
+# ファイル 関連
+# ==============================
+def get_template_paths():
+    if not os.path.exists(TEMPLATE_FILE):
+        return []
+    try:
+        with open(TEMPLATE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("paths", [])
+    except Exception as e:
+        st.error(f"テンプレートファイルの読み込み中にエラーが発生しました: {e}")
+        return []
+
+def save_template_path(new_path):
+    paths = get_template_paths()
+    if new_path not in paths:
+        paths.append(new_path)
+        with open(TEMPLATE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"paths": paths}, f, ensure_ascii=False, indent=4)
+
+def delete_template_path(path_to_delete):
+    paths = get_template_paths()
+    if path_to_delete in paths:
+        paths.remove(path_to_delete)
+        with open(TEMPLATE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"paths": paths}, f, ensure_ascii=False, indent=4)
+
+def get_file_path():
+    """使用するHDF5ファイルのパスを入力"""
+    file_path = st.text_input(
+        label="🔍 使用する .hdf5 ファイルのフルパスを貼り付け",
+        value=""
+    )
+
+    if not file_path:
+        st.stop()
+
+    if not is_hdf5_file(file_path):
+        st.warning("⚠️ 指定されたファイルはHDF5形式ではありません。対応しているファイルを選択してください。")
+        st.stop()
+
+    st.session_state.file_path = file_path
+    filename = os.path.basename(file_path)
+    st.markdown(f"##### 選択されたファイル : `{filename}`")
+    return file_path
+
+def display_template_path_manager():
+    """登録済みテンプレートパスの表示・削除機能付き"""
+    st.markdown("##### 📌 登録済みのテンプレートパス一覧")
+
+    template_paths = get_template_paths()
+
+    if not template_paths:
+        st.info("テンプレートパスはまだ登録されていません。")
+        return
+
+    for i, p in enumerate(template_paths, 1):
+        cols = st.columns([0.9, 0.1])
+        with cols[0]:
+            st.code(p, language="bash")
+        with cols[1]:
+            if st.button("🗑️", key=f"delete_{i}"):
+                delete_template_path(p)
+                st.rerun()
+
+def display_template_save_input():
+    """ユーザーが手動でテンプレートにパスを保存するUI"""
+    st.markdown("##### ➕ パスをテンプレートへ登録")
+    new_path = st.text_input("保存して使い回すPathを入力", key="new_template_input")
+
+    if new_path:
+        if st.button("💾 登録"):
+            save_template_path(new_path)
+            st.rerun()
+
 def is_hdf5_file(file_path):
     """ファイルがHDF5フォーマットかどうかをチェック"""
     try:
         return h5py.is_hdf5(file_path)
     except Exception:
         return False
-
-def get_file_path():
-    """ユーザーからのHDF5ファイルのパス入力を処理する"""
-    file_path = st.text_input(
-        label=".hdf5ファイルのフルパスを貼り付け",
-        value=""
-    )
-
-    # validation
-    if not is_hdf5_file(file_path):
-        st.error("⚠️ 指定されたファイルはHDF5形式ではありません。対応しているファイルを選択してください。")
-        st.stop()
-    st.session_state.file_path = file_path
-    filename = os.path.basename(file_path)
-    st.markdown(f"##### Selected file : `{filename}`")
-    return file_path
 
 # ==============================
 # HDF5 関連の処理
@@ -148,12 +211,24 @@ def visualize_data(dataset):
 # ==============================
 # メイン処理
 # ==============================
+
+# 設定とタイトル表示
 set_streamlit_config()
+st.divider()
+
+# テンプレートPathの表示
+st.header('テンプレートの設定')
+display_template_path_manager()
+display_template_save_input()
+st.divider()
+
+# HDF5を調べる
+st.header('HDF表示')
 file_path = get_file_path()
 
 tree_col, display_col = st.columns(2)
 if file_path:
-    path_obj = util.HDFPath(file_path)
+    path_obj = HDFPath(file_path)
     with tree_col:
         selected_path = display_hdf5_tree(path_obj)
 
