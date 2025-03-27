@@ -131,6 +131,10 @@ def display_dataset(file_path, dataset_path):
     ユーザーが選択したフルパス dataset_path に対して、
     HDF5 内のデータセットを読み取り、メタ情報や可視化を行う。
     """
+    if not isinstance(dataset_path, str):
+        st.warning('データパスが正しく選択されていません。')
+        return
+
     with h5py.File(file_path, "r") as f:
         if dataset_path not in f:
             st.error(f"パス '{dataset_path}' は HDF5 内に存在しません。")
